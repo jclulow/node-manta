@@ -210,17 +210,47 @@ function start_server_pinger(opts) {
 // Try and print out some minimal extra information from the errors
 // the job generated, if any:
 function print_job_error_messages(opts, callback) {
+    var b = vasync.barrier();
+
+    b.start('jobErrors');
     opts.mclient.jobErrors(opts.job_id, function (err, res) {
         if (err) {
-            callback();
+            b.done('jobErrors');
             return;
         }
         res.on('err', function (e) {
-            _log('IN-JOB ERROR: ' + e.code + ': ' + e.message);
+            var logmsg = 'IN-JOB ERROR: ' + e.code + ': ' + e.message;
+            var taskname;
+
+            if (e.code === 'TaskInitError' && e.stderr) {
+                taskname = 'stderr phase ' + e.phase;
+                b.start(taskname);
+                opts.mclient.get(e.stderr, function (_err, _res) {
+                    var stderrdata = '';
+                    if (_err) {
+                        b.done(taskname);
+                        return;
+                    }
+                    _res.on('data', function (ch) {
+                        stderrdata += ch.toString();
+                    });
+                    _res.once('end', function () {
+                        if (stderrdata)
+                            logmsg += '\n' + stderrdata;
+                        _log(logmsg);
+                        b.done(taskname);
+                    });
+                });
+            } else {
+                _log(logmsg);
+            }
         });
         res.once('end', function () {
-            callback();
+            b.done('jobErrors');
         });
+    });
+    b.on('drain', function () {
+        callback();
     });
 }
 
