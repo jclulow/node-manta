@@ -61,6 +61,11 @@ var OPTIONS_PARSER = dashdash.createParser({
             names: ['quiet', 'q'],
             type: 'bool',
             help: 'disable the progress bar'
+        },
+        {
+            names: ['progress', 'P'],
+            type: 'bool',
+            help: 'force the progress bar to draw, even when redirected'
         }
     ])
 });
@@ -164,11 +169,13 @@ function printEntry(obj) {
                 }
             }
 
-            if (!options.quiet && Boolean(process.stderr.isTTY)) {
+            var drawProgBar = !options.quiet && Boolean(process.stderr.isTTY);
+            if (options.progress || drawProgBar) {
                 bar = new manta.ProgressBar({
                     filename: options.path,
                     size: stats ? stats.size : undefined,
-                    nosize: stats ? false : true
+                    nosize: stats ? false : true,
+                    devtty: options.progress
                 });
                 stream.on('data', function (data) {
                     bar.advance(data.length);
